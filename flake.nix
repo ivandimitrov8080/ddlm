@@ -31,7 +31,7 @@
               enable = true;
               settings = {
                 default_session = {
-                  command = lib.mkForce "${ddlm}/bin/ddlm --session ${pkgs.sway}/bin/sway";
+                  command = lib.mkForce "${ddlm}/bin/ddlm --session ${pkgs.sway}/bin/sway --theme-file ${(pkgs.catppuccin-plymouth.override { variant = "mocha"; })}/share/plymouth/themes/catppuccin-mocha/catppuccin-mocha.plymouth";
                   user = "greeter";
                 };
               };

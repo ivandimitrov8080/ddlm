@@ -27,6 +27,7 @@ pub enum DrawError {
     GlyphNotInCache(char),
 }
 
+#[derive(Clone)]
 struct CachedGlyph {
     dimensions: (u32, u32),
     origin: (i32, i32),
@@ -90,6 +91,7 @@ impl CachedGlyph {
     }
 }
 
+#[derive(Clone)]
 pub struct Font {
     glyphs: HashMap<char, CachedGlyph>,
     font: &'static RustFont<'static>,
@@ -178,5 +180,18 @@ pub fn draw_box(buf: &mut Buffer<'_>, c: &Color, dim: (u32, u32)) -> Result<(), 
         buf.put((dim.0 - 1, y), c)?;
     }
 
+    Ok(())
+}
+
+pub fn draw_background(
+    buf: &mut Buffer<'_>,
+    c: &Color,
+    dim: (u32, u32),
+) -> Result<(), BufferError> {
+    for x in 0..dim.0 {
+        for y in 0..dim.1 {
+            buf.put((x, y), c)?;
+        }
+    }
     Ok(())
 }
