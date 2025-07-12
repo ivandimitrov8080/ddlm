@@ -211,7 +211,9 @@ impl<'a> LoginManager<'a> {
         }
     }
 
-    fn greeter_loop(&mut self) {
+    fn draw(&mut self) {
+        self.clear();
+        self.draw_bg().expect("unable to draw background");
         let mut username = String::with_capacity(USERNAME_CAP);
         let mut password = String::with_capacity(PASSWORD_CAP);
         let last_username_len = username.len();
@@ -447,9 +449,7 @@ fn main() {
 
     let mut lm = LoginManager::new(&mut framebuffer, (w, h), (1024, 168), greetd, config);
 
-    lm.clear();
-    lm.draw_bg().expect("unable to draw background");
-    lm.greeter_loop();
+    lm.draw();
     let _ = Framebuffer::set_kd_mode(KdMode::Text).expect("unable to leave graphics mode");
     drop(raw);
 }
