@@ -14,6 +14,9 @@ use crate::draw::Font;
 const USERNAME_CAP: usize = 64;
 const PASSWORD_CAP: usize = 64;
 
+const CACHE_DIR: &str = "/var/cache/ddlm/";
+const LAST_USER_USERNAME: &str = "/var/cache/ddlm/lastuser";
+
 // from linux/fb.h
 const FB_ACTIVATE_NOW: u32 = 0;
 const FB_ACTIVATE_FORCE: u32 = 128;
@@ -224,6 +227,14 @@ impl<'a> LoginManager<'a> {
         }
         let mut read_byte = || stdin_bytes.next().and_then(Result::ok).unwrap_or_else(quit);
 
+        match fs::read_to_string(LAST_USER_USERNAME) {
+            Ok(user) => {
+                self.username = user;
+                self.mode = Mode::EditingPassword;
+            }
+            Err(_) => {}
+        };
+
         loop {
             if last_mode != self.mode {
                 last_mode = self.mode;
@@ -272,11 +283,15 @@ impl<'a> LoginManager<'a> {
                                 self.password.clone(),
                                 self.config.session.clone(),
                             );
-                            self.username = String::with_capacity(USERNAME_CAP);
-                            self.password = String::with_capacity(PASSWORD_CAP);
                             match res {
-                                Ok(_) => return,
+                                Ok(_) => {
+                                    let _ = fs::create_dir_all(CACHE_DIR);
+                                    let _ = fs::write(LAST_USER_USERNAME, self.username.clone());
+                                    return;
+                                }
                                 Err(_) => {
+                                    self.username = String::with_capacity(USERNAME_CAP);
+                                    self.password = String::with_capacity(PASSWORD_CAP);
                                     self.mode = Mode::EditingUsername;
                                     self.greetd.cancel();
                                     had_failure = true;
