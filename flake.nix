@@ -31,7 +31,7 @@
               enable = true;
               settings = {
                 default_session = {
-                  command = lib.mkForce "${ddlm}/bin/ddlm ${pkgs.sway}/bin/sway";
+                  command = lib.mkForce "${ddlm}/bin/ddlm --session ${pkgs.sway}/bin/sway";
                   user = "greeter";
                 };
               };

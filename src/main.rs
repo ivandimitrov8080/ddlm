@@ -37,10 +37,6 @@ enum Error {
     Io(#[from] std::io::Error),
 }
 
-struct Target {
-    exec: Vec<String>,
-}
-
 struct LoginManager<'a> {
     buf: &'a mut [u8],
     device: &'a fs::File,
@@ -52,7 +48,7 @@ struct LoginManager<'a> {
     dimensions: (u32, u32),
     mode: Mode,
     greetd: greetd::GreetD,
-    target: Target,
+    config: Config,
 
     var_screen_info: &'a VarScreeninfo,
     should_refresh: bool,
@@ -64,7 +60,7 @@ impl<'a> LoginManager<'a> {
         screen_size: (u32, u32),
         dimensions: (u32, u32),
         greetd: greetd::GreetD,
-        target: Target,
+        config: Config,
     ) -> Self {
         Self {
             buf: &mut fb.frame,
@@ -75,7 +71,7 @@ impl<'a> LoginManager<'a> {
             dimensions,
             mode: Mode::EditingUsername,
             greetd,
-            target,
+            config,
             var_screen_info: &fb.var_screen_info,
             should_refresh: false,
         }
@@ -293,9 +289,7 @@ impl<'a> LoginManager<'a> {
                         } else {
                             self.draw_bg(&Color::YELLOW)
                                 .expect("unable to draw background");
-                            let res =
-                                self.greetd
-                                    .login(username, password, self.target.exec.to_owned());
+                            let res = self.greetd.login(username, password, self.config.session.clone());
                             username = String::with_capacity(USERNAME_CAP);
                             password = String::with_capacity(PASSWORD_CAP);
                             match res {
@@ -321,8 +315,49 @@ impl<'a> LoginManager<'a> {
     }
 }
 
+#[derive(Debug)]
+struct Config {
+    session: Vec<String>,
+    theme_file: Option<String>,
+}
+
+fn parse_args() -> Config {
+    let mut args = std::env::args().skip(1); // skip program name
+    let mut config = Config {
+        session: vec![],
+        theme_file: None,
+    };
+
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--session" => {
+                if let Some(value) = args.next() {
+                    config.session = value.split(" ").map(|s| s.to_string()).collect();
+                } else {
+                    eprintln!("Expected a value after --session");
+                }
+            }
+            "--theme-file" => {
+                if let Some(value) = args.next() {
+                    config.theme_file = Some(value);
+                } else {
+                    eprintln!("Expected a value after --session");
+                }
+            }
+            _ if arg.starts_with("--") => {
+                eprintln!("Unknown flag: {}", arg);
+            }
+            _ => {
+                println!("unknown arg {arg}");
+            }
+        }
+    }
+
+    config
+}
+
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
+    let config = parse_args();
     let mut framebuffer = Framebuffer::new("/dev/fb0").expect("unable to open framebuffer device");
 
     let w = framebuffer.var_screen_info.xres;
@@ -336,15 +371,7 @@ fn main() {
 
     let greetd = greetd::GreetD::new();
 
-    let mut lm = LoginManager::new(
-        &mut framebuffer,
-        (w, h),
-        (1024, 168),
-        greetd,
-        Target {
-            exec: args[1..].to_vec(),
-        },
-    );
+    let mut lm = LoginManager::new(&mut framebuffer, (w, h), (1024, 168), greetd, config);
 
     lm.clear();
     lm.draw_bg(&Color::GRAY).expect("unable to draw background");
