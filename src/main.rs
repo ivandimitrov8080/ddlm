@@ -2,11 +2,9 @@
 
 use std::fs;
 use std::io::Read;
-use std::path::Path;
 
 use color::Color;
 use framebuffer::{Framebuffer, KdMode, VarScreeninfo};
-use freedesktop_desktop_entry::DesktopEntry;
 use termion::raw::IntoRawMode;
 use thiserror::Error;
 
@@ -24,7 +22,6 @@ mod greetd;
 
 #[derive(PartialEq, Copy, Clone)]
 enum Mode {
-    SelectingSession,
     EditingUsername,
     EditingPassword,
 }
@@ -45,21 +42,6 @@ struct Target {
     exec: Vec<String>,
 }
 
-impl Target {
-    fn load<P: AsRef<Path>>(path: P) -> Option<Self> {
-        let path = path.as_ref();
-        let data = fs::read_to_string(path).ok()?;
-        let entry = DesktopEntry::decode(path, &data).ok()?;
-
-        let cmdline = entry.exec()?;
-        let exec = shell_words::split(cmdline).ok()?;
-
-        let name = entry.name(None).unwrap_or(entry.appid.into()).into_owned();
-
-        Some(Self { name, exec })
-    }
-}
-
 struct LoginManager<'a> {
     buf: &'a mut [u8],
     device: &'a fs::File,
@@ -71,8 +53,7 @@ struct LoginManager<'a> {
     dimensions: (u32, u32),
     mode: Mode,
     greetd: greetd::GreetD,
-    targets: Vec<Target>,
-    target_index: usize,
+    target: Target,
 
     var_screen_info: &'a VarScreeninfo,
     should_refresh: bool,
@@ -84,7 +65,7 @@ impl<'a> LoginManager<'a> {
         screen_size: (u32, u32),
         dimensions: (u32, u32),
         greetd: greetd::GreetD,
-        targets: Vec<Target>,
+        target: Target,
     ) -> Self {
         Self {
             buf: &mut fb.frame,
@@ -95,8 +76,7 @@ impl<'a> LoginManager<'a> {
             dimensions,
             mode: Mode::EditingUsername,
             greetd,
-            targets,
-            target_index: 1, // TODO: remember last user selection
+            target,
             var_screen_info: &fb.var_screen_info,
             should_refresh: false,
         }
@@ -156,20 +136,10 @@ impl<'a> LoginManager<'a> {
             "Login",
         )?;
 
-        let (session_color, username_color, password_color) = match self.mode {
-            Mode::SelectingSession => (Color::YELLOW, Color::WHITE, Color::WHITE),
-            Mode::EditingUsername => (Color::WHITE, Color::YELLOW, Color::WHITE),
-            Mode::EditingPassword => (Color::WHITE, Color::WHITE, Color::YELLOW),
+        let (username_color, password_color) = match self.mode {
+            Mode::EditingUsername => (Color::YELLOW, Color::WHITE),
+            Mode::EditingPassword => (Color::WHITE, Color::YELLOW),
         };
-
-        self.prompt_font.auto_draw_text(
-            &mut buf
-                .subdimensions((x, y, self.dimensions.0, self.dimensions.1))?
-                .offset((256, 24))?,
-            &bg,
-            &session_color,
-            "session:",
-        )?;
 
         self.prompt_font.auto_draw_text(
             &mut buf
@@ -188,28 +158,6 @@ impl<'a> LoginManager<'a> {
             &bg,
             &password_color,
             "password:",
-        )?;
-
-        self.should_refresh = true;
-
-        Ok(())
-    }
-
-    fn draw_target(&mut self) -> Result<(), Error> {
-        let (x, y) = self.offset();
-        let (x, y) = (x + 416, y + 24);
-        let dim = (self.dimensions.0 - 416 - 32, 32);
-
-        let mut buf = buffer::Buffer::new(self.buf, self.screen_size);
-        let mut buf = buf.subdimensions((x, y, dim.0, dim.1))?;
-        let bg = Color::BLACK;
-        buf.memset(&bg);
-
-        self.prompt_font.auto_draw_text(
-            &mut buf,
-            &bg,
-            &Color::WHITE,
-            &self.targets[self.target_index].name,
         )?;
 
         self.should_refresh = true;
@@ -264,16 +212,7 @@ impl<'a> LoginManager<'a> {
 
     fn goto_next_mode(&mut self) {
         self.mode = match self.mode {
-            Mode::SelectingSession => Mode::EditingUsername,
             Mode::EditingUsername => Mode::EditingPassword,
-            Mode::EditingPassword => Mode::SelectingSession,
-        }
-    }
-
-    fn goto_prev_mode(&mut self) {
-        self.mode = match self.mode {
-            Mode::SelectingSession => Mode::EditingPassword,
-            Mode::EditingUsername => Mode::SelectingSession,
             Mode::EditingPassword => Mode::EditingUsername,
         }
     }
@@ -283,7 +222,6 @@ impl<'a> LoginManager<'a> {
         let mut password = String::with_capacity(PASSWORD_CAP);
         let mut last_username_len = username.len();
         let mut last_password_len = password.len();
-        let mut last_target_index = self.target_index;
         let mut last_mode = self.mode;
         let mut had_failure = false;
 
@@ -297,8 +235,6 @@ impl<'a> LoginManager<'a> {
         }
         let mut read_byte = || stdin_bytes.next().and_then(Result::ok).unwrap_or_else(quit);
 
-        self.draw_target().expect("unable to draw target session");
-
         loop {
             if username.len() != last_username_len {
                 self.draw_username(&username, username.len() < last_username_len)
@@ -309,10 +245,6 @@ impl<'a> LoginManager<'a> {
                 self.draw_password(&password, password.len() < last_password_len)
                     .expect("unable to draw username prompt");
                 last_password_len = password.len();
-            }
-            if last_target_index != self.target_index {
-                self.draw_target().expect("unable to draw target session");
-                last_target_index = self.target_index;
             }
             if last_mode != self.mode {
                 self.draw_bg(&Color::GRAY)
@@ -329,7 +261,6 @@ impl<'a> LoginManager<'a> {
             match read_byte() as char {
                 '\x15' | '\x0B' => match self.mode {
                     // ctrl-k/ctrl-u
-                    Mode::SelectingSession => (),
                     Mode::EditingUsername => username.clear(),
                     Mode::EditingPassword => password.clear(),
                 },
@@ -342,7 +273,6 @@ impl<'a> LoginManager<'a> {
                 }
                 '\x7F' => match self.mode {
                     // backspace
-                    Mode::SelectingSession => (),
                     Mode::EditingUsername => {
                         username.pop();
                     }
@@ -352,7 +282,6 @@ impl<'a> LoginManager<'a> {
                 },
                 '\t' => self.goto_next_mode(),
                 '\r' => match self.mode {
-                    Mode::SelectingSession => self.mode = Mode::EditingUsername,
                     Mode::EditingUsername => {
                         if !username.is_empty() {
                             self.mode = Mode::EditingPassword;
@@ -365,11 +294,9 @@ impl<'a> LoginManager<'a> {
                         } else {
                             self.draw_bg(&Color::YELLOW)
                                 .expect("unable to draw background");
-                            let res = self.greetd.login(
-                                username,
-                                password,
-                                self.targets[self.target_index].exec.clone(),
-                            );
+                            let res =
+                                self.greetd
+                                    .login(username, password, self.target.exec.to_owned());
                             username = String::with_capacity(USERNAME_CAP);
                             password = String::with_capacity(PASSWORD_CAP);
                             match res {
@@ -385,32 +312,7 @@ impl<'a> LoginManager<'a> {
                         }
                     }
                 },
-                // this is terrible
-                '\x1b' => match read_byte() {
-                    b'[' => match read_byte() {
-                        b'A' => self.goto_prev_mode(),
-                        b'B' => self.goto_next_mode(),
-                        b'C' => match self.mode {
-                            Mode::SelectingSession => {
-                                self.target_index = (self.target_index + 1) % self.targets.len()
-                            }
-                            _ => (), // TODO: cursor
-                        },
-                        b'D' => match self.mode {
-                            Mode::SelectingSession => {
-                                if self.target_index == 0 {
-                                    self.target_index = self.targets.len();
-                                }
-                                self.target_index -= 1;
-                            }
-                            _ => (), // TODO: cursor
-                        },
-                        _ => (), // shrug
-                    },
-                    _ => (), // shrug
-                },
                 v => match self.mode {
-                    Mode::SelectingSession => (),
                     Mode::EditingUsername => username.push(v as char),
                     Mode::EditingPassword => password.push(v as char),
                 },
@@ -421,6 +323,7 @@ impl<'a> LoginManager<'a> {
 }
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
     let mut framebuffer = Framebuffer::new("/dev/fb0").expect("unable to open framebuffer device");
 
     let w = framebuffer.var_screen_info.xres;
@@ -434,20 +337,19 @@ fn main() {
 
     let greetd = greetd::GreetD::new();
 
-    let targets = ["/usr/share/wayland-sessions", "/usr/share/xsessions"]
-        .iter()
-        .flat_map(fs::read_dir)
-        .flatten()
-        .flatten()
-        .flat_map(|dir_entry| Target::load(dir_entry.path()))
-        .collect();
-
-    let mut lm = LoginManager::new(&mut framebuffer, (w, h), (1024, 168), greetd, targets);
+    let mut lm = LoginManager::new(
+        &mut framebuffer,
+        (w, h),
+        (1024, 168),
+        greetd,
+        Target {
+            name: "default".to_string(),
+            exec: args[1..].to_vec(),
+        },
+    );
 
     lm.clear();
     lm.draw_bg(&Color::GRAY).expect("unable to draw background");
-    lm.refresh();
-
     lm.greeter_loop();
     let _ = Framebuffer::set_kd_mode(KdMode::Text).expect("unable to leave graphics mode");
     drop(raw);
