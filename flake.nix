@@ -3,7 +3,7 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
   };
   outputs =
-    { nixpkgs, ... }:
+    { self, nixpkgs }:
     let
       system = "x86_64-linux";
       pkgs = import nixpkgs { inherit system; };
@@ -26,24 +26,32 @@
         modules = [
           {
             nixpkgs.hostPlatform = system;
+            programs.sway.enable = true;
             services.greetd = {
               enable = true;
               settings = {
                 default_session = {
-                  command = lib.mkForce "${ddlm}/bin/ddlm --target ${pkgs.swayfx}/bin/swayfx";
+                  command = lib.mkForce "${ddlm}/bin/ddlm ${pkgs.sway}/bin/sway";
                   user = "greeter";
                 };
               };
             };
-            users.users.greeter = {
-              extraGroups = [
-                "video"
-                "input"
-                "render"
-              ];
+            users.users = {
+              test = {
+                isNormalUser = true;
+                password = "test";
+              };
+              greeter = {
+                extraGroups = [
+                  "video"
+                  "input"
+                  "render"
+                ];
+              };
             };
           }
         ];
       };
+      packages.${system}.default = self.nixosConfigurations.default.config.system.build.vm;
     };
 }
