@@ -44,9 +44,6 @@ struct LoginManager<'a> {
     buf: &'a mut [u8],
     device: &'a fs::File,
 
-    headline_font: draw::Font,
-    prompt_font: draw::Font,
-
     screen_size: (u32, u32),
     dimensions: (u32, u32),
     mode: Mode,
@@ -70,8 +67,6 @@ impl<'a> LoginManager<'a> {
         Self {
             buf: &mut fb.frame,
             device: &fb.device,
-            headline_font: draw::Font::new(&draw::DEJAVUSANS_MONO, 72.0),
-            prompt_font: draw::Font::new(&draw::DEJAVUSANS_MONO, 32.0),
             screen_size,
             dimensions,
             mode: Mode::EditingUsername,
@@ -116,14 +111,17 @@ impl<'a> LoginManager<'a> {
 
         let hostname = hostname::get()?.to_string_lossy().into_owned();
 
-        self.headline_font.auto_draw_text(
+        let mut title_font = self.config.theme.module.title_font.clone();
+        let mut prompt_font = self.config.theme.module.font.clone();
+
+        title_font.auto_draw_text(
             &mut buf.offset(((self.screen_size.0 / 2) - 300, 32))?,
             &bg,
             &fg,
             &format!("Welcome to {hostname}"),
         )?;
 
-        self.headline_font.auto_draw_text(
+        title_font.auto_draw_text(
             &mut buf
                 .subdimensions((x, y, self.dimensions.0, self.dimensions.1))?
                 .offset((32, 24))?,
@@ -137,7 +135,7 @@ impl<'a> LoginManager<'a> {
             Mode::EditingPassword => (Color::WHITE, Color::YELLOW),
         };
 
-        self.prompt_font.auto_draw_text(
+        prompt_font.auto_draw_text(
             &mut buf
                 .subdimensions((x, y, self.dimensions.0, self.dimensions.1))?
                 .offset((256, 64))?,
@@ -146,7 +144,7 @@ impl<'a> LoginManager<'a> {
             "username:",
         )?;
 
-        self.prompt_font.auto_draw_text(
+        prompt_font.auto_draw_text(
             &mut buf
                 .subdimensions((x, y, self.dimensions.0, self.dimensions.1))?
                 .offset((256, 104))
@@ -168,13 +166,13 @@ impl<'a> LoginManager<'a> {
 
         let mut buf = buffer::Buffer::new(self.buf, self.screen_size);
         let mut buf = buf.subdimensions((x, y, dim.0, dim.1))?;
+        let mut prompt_font = self.config.theme.module.font.clone();
         let bg = self.config.theme.module.background_start_color;
         if redraw {
             buf.memset(&bg);
         }
 
-        self.prompt_font
-            .auto_draw_text(&mut buf, &bg, &Color::WHITE, username)?;
+        prompt_font.auto_draw_text(&mut buf, &bg, &Color::WHITE, username)?;
 
         self.should_refresh = true;
 
@@ -188,6 +186,7 @@ impl<'a> LoginManager<'a> {
 
         let mut buf = buffer::Buffer::new(self.buf, self.screen_size);
         let mut buf = buf.subdimensions((x, y, dim.0, dim.1))?;
+        let mut prompt_font = self.config.theme.module.font.clone();
         let bg = self.config.theme.module.background_start_color;
         if redraw {
             buf.memset(&bg);
@@ -198,8 +197,7 @@ impl<'a> LoginManager<'a> {
             stars += "*";
         }
 
-        self.prompt_font
-            .auto_draw_text(&mut buf, &bg, &Color::WHITE, &stars)?;
+        prompt_font.auto_draw_text(&mut buf, &bg, &Color::WHITE, &stars)?;
 
         self.should_refresh = true;
 
