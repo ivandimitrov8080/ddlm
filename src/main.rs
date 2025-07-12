@@ -98,7 +98,7 @@ impl<'a> LoginManager<'a> {
 
     fn offset(&self) -> (u32, u32) {
         (
-            (self.screen_size.0 - self.dimensions.0) / 2,
+            (self.screen_size.0 - self.dimensions.0) / 2 + 100,
             (self.screen_size.1 - self.dimensions.1) / 2,
         )
     }
@@ -115,19 +115,10 @@ impl<'a> LoginManager<'a> {
         let mut prompt_font = self.config.theme.module.font.clone();
 
         title_font.auto_draw_text(
-            &mut buf.offset(((self.screen_size.0 / 2) - 300, 32))?,
+            &mut buf.offset(((self.screen_size.0 / 2) - 100, 32))?,
             &bg,
             &fg,
             &format!("Welcome to {hostname}"),
-        )?;
-
-        title_font.auto_draw_text(
-            &mut buf
-                .subdimensions((x, y, self.dimensions.0, self.dimensions.1))?
-                .offset((32, 24))?,
-            &bg,
-            &fg,
-            "Login",
         )?;
 
         let (username_color, password_color) = match self.mode {
