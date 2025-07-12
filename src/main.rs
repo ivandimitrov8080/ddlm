@@ -1,12 +1,16 @@
 #![deny(rust_2018_idioms)]
 
-use std::fs;
+use std::convert::TryInto;
 use std::io::Read;
+use std::str::FromStr;
+use std::{fs, path::Path};
 
 use color::Color;
 use framebuffer::{Framebuffer, KdMode, VarScreeninfo};
 use termion::raw::IntoRawMode;
 use thiserror::Error;
+
+use crate::draw::Font;
 
 const USERNAME_CAP: usize = 64;
 const PASSWORD_CAP: usize = 64;
@@ -289,7 +293,9 @@ impl<'a> LoginManager<'a> {
                         } else {
                             self.draw_bg(&Color::YELLOW)
                                 .expect("unable to draw background");
-                            let res = self.greetd.login(username, password, self.config.session.clone());
+                            let res =
+                                self.greetd
+                                    .login(username, password, self.config.session.clone());
                             username = String::with_capacity(USERNAME_CAP);
                             password = String::with_capacity(PASSWORD_CAP);
                             match res {
@@ -315,17 +321,103 @@ impl<'a> LoginManager<'a> {
     }
 }
 
-#[derive(Debug)]
+struct Module {
+    name: String,
+    font: Font,
+    title_font: Font,
+    image_dir: &'static Path,
+    dialog_horizontal_alignment: f32,
+    dialog_vertical_alignment: f32,
+    title_horizontal_alignment: f32,
+    title_vertical_alignment: f32,
+    watermark_horizontal_alignment: f32,
+    watermark_vertical_alignment: f32,
+    horizontal_alignment: f32,
+    vertical_alignment: f32,
+    background_start_color: Color,
+    background_end_color: Color,
+}
+
+struct Theme {
+    name: String,
+    description: Option<String>,
+    module: Module,
+}
+
+impl FromStr for Theme {
+    type Err = Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut theme = Theme {
+            name: "".to_string(),
+            description: None,
+            module: Module {
+                name: "".to_string(),
+                font: draw::Font::new(&draw::DEJAVUSANS_MONO, 72.0),
+                title_font: draw::Font::new(&draw::DEJAVUSANS_MONO, 72.0),
+                image_dir: Path::new(""),
+                dialog_horizontal_alignment: 0f32,
+                dialog_vertical_alignment: 0f32,
+                title_horizontal_alignment: 0f32,
+                title_vertical_alignment: 0f32,
+                watermark_horizontal_alignment: 0f32,
+                watermark_vertical_alignment: 0f32,
+                horizontal_alignment: 0f32,
+                vertical_alignment: 0f32,
+                background_start_color: Color::BLACK,
+                background_end_color: Color::BLACK,
+            },
+        };
+        for l in s.lines() {
+            if l.contains("=") {
+                let (key, value) = match &l.split("=").collect::<Vec<&str>>()[..] {
+                    &[first, second, ..] => (first, second),
+                    _ => unreachable!(),
+                };
+                match key {
+                    "Name" => theme.name = value.to_string(),
+                    "Description" => theme.description = Some(value.to_string()),
+                    "ModuleName" => theme.module.name = value.to_string(),
+                    _ => {}
+                }
+            }
+        }
+        Ok(theme)
+    }
+}
+
 struct Config {
     session: Vec<String>,
-    theme_file: Option<String>,
+    theme: Theme,
+}
+
+fn parse_theme(theme_file: String) -> Theme {
+    let content = fs::read_to_string(theme_file).expect("Unable to read theme file");
+    content.parse().unwrap()
 }
 
 fn parse_args() -> Config {
     let mut args = std::env::args().skip(1); // skip program name
     let mut config = Config {
         session: vec![],
-        theme_file: None,
+        theme: Theme {
+            name: "".to_string(),
+            description: None,
+            module: Module {
+                font: draw::Font::new(&draw::DEJAVUSANS_MONO, 72.0),
+                title_font: draw::Font::new(&draw::DEJAVUSANS_MONO, 72.0),
+                image_dir: Path::new(""),
+                dialog_horizontal_alignment: 0f32,
+                dialog_vertical_alignment: 0f32,
+                title_horizontal_alignment: 0f32,
+                title_vertical_alignment: 0f32,
+                watermark_horizontal_alignment: 0f32,
+                watermark_vertical_alignment: 0f32,
+                horizontal_alignment: 0f32,
+                vertical_alignment: 0f32,
+                background_start_color: Color::BLACK,
+                background_end_color: Color::BLACK,
+            },
+        },
     };
 
     while let Some(arg) = args.next() {
@@ -339,9 +431,9 @@ fn parse_args() -> Config {
             }
             "--theme-file" => {
                 if let Some(value) = args.next() {
-                    config.theme_file = Some(value);
+                    config.theme = parse_theme(value);
                 } else {
-                    eprintln!("Expected a value after --session");
+                    eprintln!("Expected a value after --theme-file");
                 }
             }
             _ if arg.starts_with("--") => {
