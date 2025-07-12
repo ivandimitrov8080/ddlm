@@ -55,6 +55,8 @@ struct LoginManager<'a> {
 
     var_screen_info: &'a VarScreeninfo,
     should_refresh: bool,
+    username: String,
+    password: String,
 }
 
 impl<'a> LoginManager<'a> {
@@ -77,6 +79,8 @@ impl<'a> LoginManager<'a> {
             config,
             var_screen_info: &fb.var_screen_info,
             should_refresh: false,
+            username: String::with_capacity(USERNAME_CAP),
+            password: String::with_capacity(PASSWORD_CAP),
         }
     }
 
@@ -92,7 +96,7 @@ impl<'a> LoginManager<'a> {
 
     fn clear(&mut self) {
         let mut buf = buffer::Buffer::new(self.buf, self.screen_size);
-        let bg = Color::BLACK;
+        let bg = self.config.theme.module.background_start_color;
         buf.memset(&bg);
         self.should_refresh = true;
     }
@@ -111,8 +115,6 @@ impl<'a> LoginManager<'a> {
         let fg = Color::WHITE;
 
         let hostname = hostname::get()?.to_string_lossy().into_owned();
-
-        draw::draw_background(&mut buf, &bg, self.screen_size)?;
 
         self.headline_font.auto_draw_text(
             &mut buf.offset(((self.screen_size.0 / 2) - 300, 32))?,
@@ -211,16 +213,18 @@ impl<'a> LoginManager<'a> {
         }
     }
 
+    fn redraw(&mut self) {
+        self.draw_bg().expect("unable to draw background");
+        self.draw_username(&self.username.clone(), true)
+            .expect("unable to draw username prompt");
+        self.draw_password(&self.password.clone(), true)
+            .expect("unable to draw password prompt");
+    }
+
     fn draw(&mut self) {
         self.clear();
-        self.draw_bg().expect("unable to draw background");
-        let mut username = String::with_capacity(USERNAME_CAP);
-        let mut password = String::with_capacity(PASSWORD_CAP);
-        let last_username_len = username.len();
-        let last_password_len = password.len();
         let mut last_mode = self.mode;
         let mut had_failure = false;
-
         let stdin_handle = std::io::stdin();
         let stdin_lock = stdin_handle.lock();
         let mut stdin_bytes = stdin_lock.bytes();
@@ -238,51 +242,49 @@ impl<'a> LoginManager<'a> {
             if had_failure {
                 had_failure = false;
             }
-            self.draw_bg().expect("unable to draw background");
-            self.draw_username(&username, username.len() < last_username_len)
-                .expect("unable to draw username prompt");
-            self.draw_password(&password, password.len() < last_password_len)
-                .expect("unable to draw password prompt");
+            self.redraw();
 
             match read_byte() as char {
                 '\x15' | '\x0B' => match self.mode {
                     // ctrl-k/ctrl-u
-                    Mode::EditingUsername => username.clear(),
-                    Mode::EditingPassword => password.clear(),
+                    Mode::EditingUsername => self.username.clear(),
+                    Mode::EditingPassword => self.password.clear(),
                 },
                 '\x03' | '\x04' => {
                     // ctrl-c/ctrl-D
-                    username.clear();
-                    password.clear();
+                    self.username.clear();
+                    self.password.clear();
                     self.greetd.cancel();
                     return;
                 }
                 '\x7F' => match self.mode {
                     // backspace
                     Mode::EditingUsername => {
-                        username.pop();
+                        self.username.pop();
                     }
                     Mode::EditingPassword => {
-                        password.pop();
+                        self.password.pop();
                     }
                 },
                 '\t' => self.goto_next_mode(),
                 '\r' => match self.mode {
                     Mode::EditingUsername => {
-                        if !username.is_empty() {
+                        if !self.username.is_empty() {
                             self.mode = Mode::EditingPassword;
                         }
                     }
                     Mode::EditingPassword => {
-                        if password.is_empty() {
-                            username.clear();
+                        if self.password.is_empty() {
+                            self.username.clear();
                             self.mode = Mode::EditingUsername;
                         } else {
-                            let res =
-                                self.greetd
-                                    .login(username, password, self.config.session.clone());
-                            username = String::with_capacity(USERNAME_CAP);
-                            password = String::with_capacity(PASSWORD_CAP);
+                            let res = self.greetd.login(
+                                self.username.clone(),
+                                self.password.clone(),
+                                self.config.session.clone(),
+                            );
+                            self.username = String::with_capacity(USERNAME_CAP);
+                            self.password = String::with_capacity(PASSWORD_CAP);
                             match res {
                                 Ok(_) => return,
                                 Err(_) => {
@@ -295,8 +297,8 @@ impl<'a> LoginManager<'a> {
                     }
                 },
                 v => match self.mode {
-                    Mode::EditingUsername => username.push(v as char),
-                    Mode::EditingPassword => password.push(v as char),
+                    Mode::EditingUsername => self.username.push(v as char),
+                    Mode::EditingPassword => self.password.push(v as char),
                 },
             }
             self.refresh();
@@ -433,7 +435,6 @@ fn parse_args() -> Config {
 
 fn main() {
     let config = parse_args();
-    let bg = config.theme.module.background_start_color.clone();
     let mut framebuffer = Framebuffer::new("/dev/fb0").expect("unable to open framebuffer device");
 
     let w = framebuffer.var_screen_info.xres;
