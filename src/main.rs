@@ -154,21 +154,12 @@ fn parse_args() -> Config {
 }
 
 fn main() {
-    let config = parse_args();
     let mut framebuffer = Framebuffer::new("/dev/fb0").expect("unable to open framebuffer device");
-
-    let w = framebuffer.var_screen_info.xres;
-    let h = framebuffer.var_screen_info.yres;
-
     let raw = std::io::stdout()
         .into_raw_mode()
         .expect("unable to enter raw mode");
-
     Framebuffer::set_kd_mode(KdMode::Graphics).expect("unable to enter graphics mode");
-
-    let mut lm = LoginManager::new(&mut framebuffer, (w, h), (1024, 168), config);
-
-    lm.start();
-    let _ = Framebuffer::set_kd_mode(KdMode::Text).expect("unable to leave graphics mode");
+    LoginManager::new(&mut framebuffer, parse_args()).start();
+    Framebuffer::set_kd_mode(KdMode::Text).expect("unable to leave graphics mode");
     drop(raw);
 }

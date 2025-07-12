@@ -1,8 +1,8 @@
 use std::fs;
 use std::io::Read;
 
-use framebuffer::{Framebuffer, KdMode, VarScreeninfo};
 use crate::color::Color;
+use framebuffer::{Framebuffer, KdMode, VarScreeninfo};
 
 use crate::{buffer, greetd, Config, Error};
 const USERNAME_CAP: usize = 64;
@@ -13,7 +13,6 @@ const LAST_USER_USERNAME: &str = "/var/cache/ndlm/lastuser";
 // from linux/fb.h
 const FB_ACTIVATE_NOW: u32 = 0;
 const FB_ACTIVATE_FORCE: u32 = 128;
-
 
 #[derive(PartialEq, Copy, Clone)]
 enum Mode {
@@ -38,17 +37,12 @@ pub struct LoginManager<'a> {
 }
 
 impl<'a> LoginManager<'a> {
-    pub fn new(
-        fb: &'a mut Framebuffer,
-        screen_size: (u32, u32),
-        dimensions: (u32, u32),
-        config: Config,
-    ) -> Self {
+    pub fn new(fb: &'a mut Framebuffer, config: Config) -> Self {
         Self {
             buf: &mut fb.frame,
             device: &fb.device,
-            screen_size,
-            dimensions,
+            screen_size: (fb.var_screen_info.xres, fb.var_screen_info.yres),
+            dimensions: (1024, 168),
             mode: Mode::EditingUsername,
             greetd: greetd::GreetD::new(),
             config,
