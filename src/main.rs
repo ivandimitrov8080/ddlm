@@ -14,7 +14,6 @@ use crate::draw::Font;
 const USERNAME_CAP: usize = 64;
 const PASSWORD_CAP: usize = 64;
 
-const CACHE_DIR: &str = "/var/cache/ddlm/";
 const LAST_USER_USERNAME: &str = "/var/cache/ddlm/lastuser";
 
 // from linux/fb.h
@@ -285,7 +284,6 @@ impl<'a> LoginManager<'a> {
                             );
                             match res {
                                 Ok(_) => {
-                                    let _ = fs::create_dir_all(CACHE_DIR);
                                     let _ = fs::write(LAST_USER_USERNAME, self.username.clone());
                                     return;
                                 }
