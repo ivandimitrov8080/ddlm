@@ -2,6 +2,7 @@ use crate::buffer::{Buffer, BufferError};
 use crate::color::Color;
 
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use lazy_static::lazy_static;
 use rusttype::{point, Font as RustFont, Scale};
@@ -93,6 +94,20 @@ pub struct Font {
     glyphs: HashMap<char, CachedGlyph>,
     font: &'static RustFont<'static>,
     size: f32,
+}
+
+impl Default for Font {
+    fn default() -> Self {
+        Font::new(&DEJAVUSANS_MONO, 72.0)
+    }
+}
+
+impl FromStr for Font {
+    type Err = crate::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let size = s.split(" ").last().unwrap().parse().unwrap();
+        Ok(Font::new(&DEJAVUSANS_MONO, size))
+    }
 }
 
 impl Font {

@@ -32,7 +32,7 @@ enum Mode {
 
 #[derive(Error, Debug)]
 #[non_exhaustive]
-enum Error {
+pub enum Error {
     #[error("Error performing buffer operation: {0}")]
     Buffer(#[from] buffer::BufferError),
     #[error("Error performing draw operation: {0}")]
@@ -321,11 +321,11 @@ impl<'a> LoginManager<'a> {
     }
 }
 
+#[derive(Default)]
 struct Module {
-    name: String,
     font: Font,
     title_font: Font,
-    image_dir: &'static Path,
+    image_dir: String,
     dialog_horizontal_alignment: f32,
     dialog_vertical_alignment: f32,
     title_horizontal_alignment: f32,
@@ -338,6 +338,43 @@ struct Module {
     background_end_color: Color,
 }
 
+impl FromStr for Module {
+    type Err = Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut module = Module::default();
+        for l in s.lines() {
+            if l.contains("=") {
+                let (key, value) = match &l.split("=").collect::<Vec<&str>>()[..] {
+                    &[first, second, ..] => (first, second),
+                    _ => unreachable!(),
+                };
+                let mut v = 0f32;
+                if value.starts_with(".") {
+                    v = format!("0{}", value).parse().unwrap();
+                }
+                match key {
+                    "Font" => module.font = value.to_string().parse().unwrap(),
+                    "TitleFont" => module.title_font = value.to_string().parse().unwrap(),
+                    "ImageDir" => module.image_dir = value.to_string(),
+                    "DialogHorizontalAlignment" => module.dialog_horizontal_alignment = v,
+                    "DialogVerticalAlignment" => module.dialog_vertical_alignment = v,
+                    "TitleHorizontalAlignment" => module.title_horizontal_alignment = v,
+                    "TitleVerticalAlignment" => module.title_vertical_alignment = v,
+                    "HorizontalAlignment" => module.horizontal_alignment = v,
+                    "VerticalAlignment" => module.vertical_alignment = v,
+                    "WatermarkHorizontalAlignment" => module.watermark_horizontal_alignment = v,
+                    "WatermarkVerticalAlignment" => module.watermark_vertical_alignment = v,
+                    "BackgroundStartColor" => module.background_start_color = value.parse().unwrap(),
+                    "BackgroundEndColor" => module.background_end_color = value.parse().unwrap(),
+                    _ => {}
+                }
+            }
+        }
+        Ok(module)
+    }
+}
+
+#[derive(Default)]
 struct Theme {
     name: String,
     description: Option<String>,
@@ -347,26 +384,7 @@ struct Theme {
 impl FromStr for Theme {
     type Err = Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut theme = Theme {
-            name: "".to_string(),
-            description: None,
-            module: Module {
-                name: "".to_string(),
-                font: draw::Font::new(&draw::DEJAVUSANS_MONO, 72.0),
-                title_font: draw::Font::new(&draw::DEJAVUSANS_MONO, 72.0),
-                image_dir: Path::new(""),
-                dialog_horizontal_alignment: 0f32,
-                dialog_vertical_alignment: 0f32,
-                title_horizontal_alignment: 0f32,
-                title_vertical_alignment: 0f32,
-                watermark_horizontal_alignment: 0f32,
-                watermark_vertical_alignment: 0f32,
-                horizontal_alignment: 0f32,
-                vertical_alignment: 0f32,
-                background_start_color: Color::BLACK,
-                background_end_color: Color::BLACK,
-            },
-        };
+        let mut theme = Theme::default();
         for l in s.lines() {
             if l.contains("=") {
                 let (key, value) = match &l.split("=").collect::<Vec<&str>>()[..] {
@@ -376,7 +394,7 @@ impl FromStr for Theme {
                 match key {
                     "Name" => theme.name = value.to_string(),
                     "Description" => theme.description = Some(value.to_string()),
-                    "ModuleName" => theme.module.name = value.to_string(),
+                    "ModuleName" => theme.module = s.parse().unwrap(),
                     _ => {}
                 }
             }
@@ -385,6 +403,7 @@ impl FromStr for Theme {
     }
 }
 
+#[derive(Default)]
 struct Config {
     session: Vec<String>,
     theme: Theme,
@@ -397,28 +416,7 @@ fn parse_theme(theme_file: String) -> Theme {
 
 fn parse_args() -> Config {
     let mut args = std::env::args().skip(1); // skip program name
-    let mut config = Config {
-        session: vec![],
-        theme: Theme {
-            name: "".to_string(),
-            description: None,
-            module: Module {
-                font: draw::Font::new(&draw::DEJAVUSANS_MONO, 72.0),
-                title_font: draw::Font::new(&draw::DEJAVUSANS_MONO, 72.0),
-                image_dir: Path::new(""),
-                dialog_horizontal_alignment: 0f32,
-                dialog_vertical_alignment: 0f32,
-                title_horizontal_alignment: 0f32,
-                title_vertical_alignment: 0f32,
-                watermark_horizontal_alignment: 0f32,
-                watermark_vertical_alignment: 0f32,
-                horizontal_alignment: 0f32,
-                vertical_alignment: 0f32,
-                background_start_color: Color::BLACK,
-                background_end_color: Color::BLACK,
-            },
-        },
-    };
+    let mut config = Config::default();
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
