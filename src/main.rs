@@ -38,7 +38,6 @@ enum Error {
 }
 
 struct Target {
-    name: String,
     exec: Vec<String>,
 }
 
@@ -343,7 +342,6 @@ fn main() {
         (1024, 168),
         greetd,
         Target {
-            name: "default".to_string(),
             exec: args[1..].to_vec(),
         },
     );
