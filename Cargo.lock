@@ -104,28 +104,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
-name = "ddlm"
-version = "0.1.0"
-dependencies = [
- "byteorder",
- "chrono",
- "framebuffer",
- "freedesktop-desktop-entry",
- "getopts",
- "greetd_ipc",
- "hostname",
- "lazy_static",
- "memmap",
- "nix",
- "pam",
- "rusttype",
- "shell-words",
- "termion",
- "thiserror",
- "users 0.11.0",
-]
-
-[[package]]
 name = "dirs"
 version = "3.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -371,6 +349,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5aa361d4faea93603064a027415f07bd8e1d5c88c9fbf68bf56a285428fd79ce"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "ndlm"
+version = "0.1.0"
+dependencies = [
+ "byteorder",
+ "chrono",
+ "framebuffer",
+ "freedesktop-desktop-entry",
+ "getopts",
+ "greetd_ipc",
+ "hostname",
+ "lazy_static",
+ "memmap",
+ "nix",
+ "pam",
+ "rusttype",
+ "shell-words",
+ "termion",
+ "thiserror",
+ "users 0.11.0",
 ]
 
 [[package]]

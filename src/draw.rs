@@ -1,4 +1,4 @@
-use crate::buffer::{Buffer, BufferError};
+use crate::buffer::{Buffer};
 use crate::color::Color;
 
 use std::collections::HashMap;
@@ -170,28 +170,28 @@ impl Font {
     }
 }
 
-pub fn draw_box(buf: &mut Buffer<'_>, c: &Color, dim: (u32, u32)) -> Result<(), BufferError> {
-    for x in 0..dim.0 {
-        let _ = buf.put((x, 0), c);
-        let _ = buf.put((x, dim.1 - 1), c);
-    }
-    for y in 0..dim.1 {
-        buf.put((0, y), c)?;
-        buf.put((dim.0 - 1, y), c)?;
-    }
-
-    Ok(())
-}
-
-pub fn draw_background(
-    buf: &mut Buffer<'_>,
-    c: &Color,
-    dim: (u32, u32),
-) -> Result<(), BufferError> {
-    for x in 0..dim.0 {
-        for y in 0..dim.1 {
-            buf.put((x, y), c)?;
-        }
-    }
-    Ok(())
-}
+// pub fn draw_box(buf: &mut Buffer<'_>, c: &Color, dim: (u32, u32)) -> Result<(), BufferError> {
+//     for x in 0..dim.0 {
+//         let _ = buf.put((x, 0), c);
+//         let _ = buf.put((x, dim.1 - 1), c);
+//     }
+//     for y in 0..dim.1 {
+//         buf.put((0, y), c)?;
+//         buf.put((dim.0 - 1, y), c)?;
+//     }
+//
+//     Ok(())
+// }
+//
+// pub fn draw_background(
+//     buf: &mut Buffer<'_>,
+//     c: &Color,
+//     dim: (u32, u32),
+// ) -> Result<(), BufferError> {
+//     for x in 0..dim.0 {
+//         for y in 0..dim.1 {
+//             buf.put((x, y), c)?;
+//         }
+//     }
+//     Ok(())
+// }

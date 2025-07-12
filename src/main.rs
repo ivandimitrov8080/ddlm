@@ -14,7 +14,7 @@ use crate::draw::Font;
 const USERNAME_CAP: usize = 64;
 const PASSWORD_CAP: usize = 64;
 
-const LAST_USER_USERNAME: &str = "/var/cache/ddlm/lastuser";
+const LAST_USER_USERNAME: &str = "/var/cache/ndlm/lastuser";
 
 // from linux/fb.h
 const FB_ACTIVATE_NOW: u32 = 0;

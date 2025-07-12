@@ -8,12 +8,12 @@
       system = "x86_64-linux";
       pkgs = import nixpkgs { inherit system; };
       lib = pkgs.lib;
-      ddlm = (
+      ndlm = (
         pkgs.rustPlatform.buildRustPackage rec {
-          pname = "ddlm";
+          pname = "ndlm";
           version = "1.0";
           src = ./.;
-          cargoHash = "sha256-9DltXjD7AxRNCg/TWO4xYnIppJfWLoPgRJ0/u7IA+VM=";
+          cargoHash = "sha256-8f71QI+TlqZh4Ogx4asjCx8r4dNx2vjF3juuWuFcDys=";
 
           meta = {
             mainProgram = pname;
@@ -31,7 +31,7 @@
               enable = true;
               settings = {
                 default_session = {
-                  command = lib.mkForce "${ddlm}/bin/ddlm --session ${pkgs.sway}/bin/sway --theme-file ${(pkgs.catppuccin-plymouth.override { variant = "mocha"; })}/share/plymouth/themes/catppuccin-mocha/catppuccin-mocha.plymouth";
+                  command = lib.mkForce "${ndlm}/bin/ndlm --session ${pkgs.sway}/bin/sway --theme-file ${(pkgs.catppuccin-plymouth.override { variant = "mocha"; })}/share/plymouth/themes/catppuccin-mocha/catppuccin-mocha.plymouth";
                   user = "greeter";
                 };
               };

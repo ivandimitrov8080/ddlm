@@ -34,7 +34,6 @@ impl FromStr for Color {
 }
 
 impl Color {
-    pub const BLACK: Self = rgb(0.0, 0.0, 0.0);
     pub const WHITE: Self = rgb(1.0, 1.0, 1.0);
     pub const YELLOW: Self = rgb(0.75, 0.75, 0.25);
 
