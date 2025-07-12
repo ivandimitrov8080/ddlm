@@ -13,7 +13,7 @@
           pname = "ddlm";
           version = "1.0";
           src = ./.;
-          cargoHash = "sha256-VvWAWcs7/3RXF60zVb7D+E9Lp/fP4OgFH7JXFvSTpsE=";
+          cargoHash = "sha256-9DltXjD7AxRNCg/TWO4xYnIppJfWLoPgRJ0/u7IA+VM=";
 
           meta = {
             mainProgram = pname;
