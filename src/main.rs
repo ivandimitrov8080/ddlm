@@ -14,6 +14,7 @@ mod color;
 mod draw;
 mod greetd;
 mod manager;
+mod graphics;
 
 #[derive(Error, Debug)]
 #[non_exhaustive]
