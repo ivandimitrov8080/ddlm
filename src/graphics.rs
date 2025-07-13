@@ -1,7 +1,8 @@
 //! graphics.rs
 // A p5.js-style graphics API over DRM dumb buffers
 
-use drm::control::dumbbuffer::{DumbBuffer, DumbMapping};
+use drm::buffer::{Buffer, DrmFourcc};
+use drm::control::dumbbuffer::DumbBuffer;
 use drm::control::Device as ControlDevice;
 use drm::Device as BasicDevice;
 use std::f64::consts::PI;
@@ -13,7 +14,7 @@ pub struct Graphics<'a> {
     pub width: usize,
     pub height: usize,
     fb: DumbBuffer,
-    buf: DumbMapping<'a>,
+    buf: &'a mut [u8],
     card: Card,
     stride: usize,
     bg_color: Color,
@@ -37,13 +38,17 @@ impl AsFd for Card {
 impl BasicDevice for Card {}
 impl ControlDevice for Card {}
 
-impl Graphics<'static> {
+impl Graphics<'_> {
     pub fn new(path: &str, width: usize, height: usize) -> Self {
         let file = File::options().read(true).write(true).open(path).unwrap();
         let card = Card(file);
 
-        let mut fb = DumbBuffer::create_from(&card, (width as u32, height as u32), 32).unwrap();
-        let buf = DumbMapping::map(&mut fb, &card).unwrap();
+        let mut fb = card
+            .create_dumb_buffer((width as u32, height as u32), DrmFourcc::Big_endian, 32)
+            .unwrap();
+        let mut handle = card.map_dumb_buffer(&mut fb).unwrap();
+        let buf =
+            unsafe { std::slice::from_raw_parts_mut(handle.as_mut_ptr(), fb.size() as usize) };
 
         Self {
             width,
@@ -51,7 +56,7 @@ impl Graphics<'static> {
             fb,
             buf,
             card,
-            stride: width * 4,
+            stride: fb.pitch() as usize,
             bg_color: Color(0, 0, 0),
             fg_color: Color(255, 255, 255),
         }
@@ -62,7 +67,7 @@ impl Graphics<'static> {
     }
 
     pub fn clear(&mut self) {
-        for chunk in self.buf.as_mut().chunks_exact_mut(4) {
+        for chunk in self.buf.chunks_exact_mut(4) {
             let Color(r, g, b) = self.bg_color;
             chunk[0] = b;
             chunk[1] = g;
@@ -76,11 +81,13 @@ impl Graphics<'static> {
             return;
         }
         let i = (y as usize * self.stride) + (x as usize * 4);
-        let Color(r, g, b) = self.fg_color;
-        self.buf.as_mut()[i] = b;
-        self.buf.as_mut()[i + 1] = g;
-        self.buf.as_mut()[i + 2] = r;
-        self.buf.as_mut()[i + 3] = 0xff;
+        if i + 3 < self.buf.len() {
+            let Color(r, g, b) = self.fg_color;
+            self.buf[i] = b;
+            self.buf[i + 1] = g;
+            self.buf[i + 2] = r;
+            self.buf[i + 3] = 0xff;
+        }
     }
 
     pub fn draw_circle(&mut self, cx: isize, cy: isize, radius: isize) {
@@ -128,8 +135,6 @@ impl Graphics<'static> {
     }
 
     pub fn present(&mut self) {
-        // In a real implementation, you'd do modesetting and page flipping here.
-        // This is a stub — you can write the buffer to a file for testing or extend with KMS display.
-        std::fs::write("framebuffer.raw", self.buf.as_ref()).unwrap();
+        std::fs::write("framebuffer.raw", self.buf).unwrap();
     }
 }
