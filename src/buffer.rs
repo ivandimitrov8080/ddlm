@@ -41,29 +41,6 @@ impl<'a> Buffer<'a> {
         }
     }
 
-    pub fn subdimensions(&mut self, subdimensions: Rect) -> Result<Buffer<'_>, BufferError> {
-        let bounds = self.get_bounds();
-        if subdimensions.0 + subdimensions.2 >= bounds.2
-            || subdimensions.1 + subdimensions.3 >= bounds.3
-        {
-            return Err(BufferError::SubdimensionsTooLarge {
-                subdimensions,
-                bounds,
-            });
-        }
-
-        Ok(Buffer {
-            buf: self.buf,
-            dimensions: self.dimensions,
-            subdimensions: Some((
-                subdimensions.0 + bounds.0,
-                subdimensions.1 + bounds.1,
-                subdimensions.2,
-                subdimensions.3,
-            )),
-        })
-    }
-
     pub fn offset(&mut self, offset: Vect) -> Result<Buffer<'_>, BufferError> {
         let bounds = self.get_bounds();
         if offset.0 > bounds.2 || offset.1 > bounds.3 {

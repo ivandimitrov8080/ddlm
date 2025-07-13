@@ -25,7 +25,6 @@ pub struct LoginManager<'a> {
     device: &'a fs::File,
 
     screen_size: (u32, u32),
-    dimensions: (u32, u32),
     mode: Mode,
     greetd: greetd::GreetD,
     config: Config,
@@ -42,7 +41,6 @@ impl<'a> LoginManager<'a> {
             buf: &mut fb.frame,
             device: &fb.device,
             screen_size: (fb.var_screen_info.xres, fb.var_screen_info.yres),
-            dimensions: (1024, 168),
             mode: Mode::EditingUsername,
             greetd: greetd::GreetD::new(),
             var_screen_info: &fb.var_screen_info,
