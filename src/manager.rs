@@ -32,6 +32,7 @@ pub struct LoginManager<'a> {
     stdin_bytes: Bytes<StdinLock<'static>>,
     username: String,
     password: String,
+    should_quit: bool,
 }
 
 impl<'a> LoginManager<'a> {
@@ -48,6 +49,7 @@ impl<'a> LoginManager<'a> {
             username: String::with_capacity(USERNAME_CAP),
             password: String::with_capacity(PASSWORD_CAP),
             config,
+            should_quit: false,
         }
     }
 
@@ -137,6 +139,7 @@ impl<'a> LoginManager<'a> {
                 self.username.clear();
                 self.password.clear();
                 self.greetd.cancel();
+                self.should_quit = true;
                 return;
             }
             '\x7F' => match self.mode {
@@ -168,6 +171,7 @@ impl<'a> LoginManager<'a> {
                         match res {
                             Ok(_) => {
                                 let _ = fs::write(LAST_USER_USERNAME, self.username.clone());
+                                self.should_quit = true;
                                 return;
                             }
                             Err(_) => {
@@ -205,6 +209,9 @@ impl<'a> LoginManager<'a> {
             self.draw();
             self.handle_keyboard();
             self.refresh();
+            if self.should_quit {
+                return;
+            }
         }
     }
 }
