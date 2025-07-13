@@ -1,5 +1,5 @@
-use std::fs;
-use std::io::Read;
+use std::io::{Read, StdinLock};
+use std::{fs, io::Bytes};
 
 use crate::color::Color;
 use framebuffer::{Framebuffer, KdMode, VarScreeninfo};
@@ -23,14 +23,13 @@ enum Mode {
 pub struct LoginManager<'a> {
     buf: &'a mut [u8],
     device: &'a fs::File,
-
     screen_size: (u32, u32),
     mode: Mode,
     greetd: greetd::GreetD,
     config: Config,
-
     var_screen_info: &'a VarScreeninfo,
     should_refresh: bool,
+    stdin_bytes: Bytes<StdinLock<'static>>,
     username: String,
     password: String,
 }
@@ -45,6 +44,7 @@ impl<'a> LoginManager<'a> {
             greetd: greetd::GreetD::new(),
             var_screen_info: &fb.var_screen_info,
             should_refresh: false,
+            stdin_bytes: std::io::stdin().lock().bytes(),
             username: String::with_capacity(USERNAME_CAP),
             password: String::with_capacity(PASSWORD_CAP),
             config,
@@ -109,7 +109,7 @@ impl<'a> LoginManager<'a> {
         }
     }
 
-    fn redraw(&mut self) {
+    fn draw(&mut self) {
         let xoff = self.config.theme.module.dialog_horizontal_alignment;
         let yoff = self.config.theme.module.dialog_vertical_alignment;
         let x = (self.screen_size.0 as f32 * xoff) as u32;
@@ -118,21 +118,78 @@ impl<'a> LoginManager<'a> {
         self.should_refresh = true;
     }
 
-    pub fn start(&mut self) {
-        self.clear();
-        self.redraw();
-        let mut last_mode = self.mode;
-        let mut had_failure = false;
-        let stdin_handle = std::io::stdin();
-        let stdin_lock = stdin_handle.lock();
-        let mut stdin_bytes = stdin_lock.bytes();
+    fn read_byte(&mut self) -> u8 {
+        self.stdin_bytes
+            .next()
+            .and_then(Result::ok)
+            .unwrap_or_else(quit)
+    }
 
-        fn quit() -> u8 {
-            Framebuffer::set_kd_mode(KdMode::Text).expect("unable to leave graphics mode");
-            std::process::exit(1);
+    fn handle_keyboard(&mut self) {
+        match self.read_byte() as char {
+            '\x15' | '\x0B' => match self.mode {
+                // ctrl-k/ctrl-u
+                Mode::EditingUsername => self.username.clear(),
+                Mode::EditingPassword => self.password.clear(),
+            },
+            '\x03' | '\x04' => {
+                // ctrl-c/ctrl-D
+                self.username.clear();
+                self.password.clear();
+                self.greetd.cancel();
+                return;
+            }
+            '\x7F' => match self.mode {
+                // backspace
+                Mode::EditingUsername => {
+                    self.username.pop();
+                }
+                Mode::EditingPassword => {
+                    self.password.pop();
+                }
+            },
+            '\t' => self.goto_next_mode(),
+            '\r' => match self.mode {
+                Mode::EditingUsername => {
+                    if !self.username.is_empty() {
+                        self.mode = Mode::EditingPassword;
+                    }
+                }
+                Mode::EditingPassword => {
+                    if self.password.is_empty() {
+                        self.username.clear();
+                        self.mode = Mode::EditingUsername;
+                    } else {
+                        let res = self.greetd.login(
+                            self.username.clone(),
+                            self.password.clone(),
+                            self.config.session.clone(),
+                        );
+                        match res {
+                            Ok(_) => {
+                                let _ = fs::write(LAST_USER_USERNAME, self.username.clone());
+                                return;
+                            }
+                            Err(_) => {
+                                self.username = String::with_capacity(USERNAME_CAP);
+                                self.password = String::with_capacity(PASSWORD_CAP);
+                                self.mode = Mode::EditingUsername;
+                                self.greetd.cancel();
+                            }
+                        }
+                    }
+                }
+            },
+            v => match self.mode {
+                Mode::EditingUsername => self.username.push(v as char),
+                Mode::EditingPassword => self.password.push(v as char),
+            },
         }
-        let mut read_byte = || stdin_bytes.next().and_then(Result::ok).unwrap_or_else(quit);
+    }
 
+    fn setup(&mut self) {
+        self.clear();
+        self.draw();
         match fs::read_to_string(LAST_USER_USERNAME) {
             Ok(user) => {
                 self.username = user;
@@ -140,77 +197,18 @@ impl<'a> LoginManager<'a> {
             }
             Err(_) => {}
         };
+    }
 
+    pub fn start(&mut self) {
+        self.setup();
         loop {
-            if last_mode != self.mode {
-                last_mode = self.mode;
-            }
-            if had_failure {
-                had_failure = false;
-            }
-            self.redraw();
-
-            match read_byte() as char {
-                '\x15' | '\x0B' => match self.mode {
-                    // ctrl-k/ctrl-u
-                    Mode::EditingUsername => self.username.clear(),
-                    Mode::EditingPassword => self.password.clear(),
-                },
-                '\x03' | '\x04' => {
-                    // ctrl-c/ctrl-D
-                    self.username.clear();
-                    self.password.clear();
-                    self.greetd.cancel();
-                    return;
-                }
-                '\x7F' => match self.mode {
-                    // backspace
-                    Mode::EditingUsername => {
-                        self.username.pop();
-                    }
-                    Mode::EditingPassword => {
-                        self.password.pop();
-                    }
-                },
-                '\t' => self.goto_next_mode(),
-                '\r' => match self.mode {
-                    Mode::EditingUsername => {
-                        if !self.username.is_empty() {
-                            self.mode = Mode::EditingPassword;
-                        }
-                    }
-                    Mode::EditingPassword => {
-                        if self.password.is_empty() {
-                            self.username.clear();
-                            self.mode = Mode::EditingUsername;
-                        } else {
-                            let res = self.greetd.login(
-                                self.username.clone(),
-                                self.password.clone(),
-                                self.config.session.clone(),
-                            );
-                            match res {
-                                Ok(_) => {
-                                    let _ = fs::write(LAST_USER_USERNAME, self.username.clone());
-                                    return;
-                                }
-                                Err(_) => {
-                                    self.username = String::with_capacity(USERNAME_CAP);
-                                    self.password = String::with_capacity(PASSWORD_CAP);
-                                    self.mode = Mode::EditingUsername;
-                                    self.greetd.cancel();
-                                    had_failure = true;
-                                }
-                            }
-                        }
-                    }
-                },
-                v => match self.mode {
-                    Mode::EditingUsername => self.username.push(v as char),
-                    Mode::EditingPassword => self.password.push(v as char),
-                },
-            }
+            self.draw();
+            self.handle_keyboard();
             self.refresh();
         }
     }
+}
+fn quit() -> u8 {
+    Framebuffer::set_kd_mode(KdMode::Text).expect("unable to leave graphics mode");
+    std::process::exit(1);
 }
