@@ -1,27 +1,26 @@
 //! graphics.rs
 // A p5.js-style graphics API over DRM dumb buffers
 
-use drm::buffer::{Buffer, DrmFourcc};
-use drm::control::dumbbuffer::{DumbBuffer, DumbMapping};
-use drm::control::Device as ControlDevice;
+use drm::buffer::Buffer;
+use drm::control::{dumbbuffer::DumbBuffer, Device as ControlDevice};
 use drm::Device as BasicDevice;
 use std::f64::consts::PI;
 use std::fs::File;
 use std::os::fd::AsFd;
 use std::os::unix::io::{AsRawFd, RawFd};
 
-pub struct Graphics {
+use crate::color::Color;
+
+pub struct Graphics<'a> {
     pub width: usize,
     pub height: usize,
     fb: DumbBuffer,
+    map: drm::control::dumbbuffer::DumbMapping<'a>,
     card: Card,
     stride: usize,
     bg_color: Color,
     fg_color: Color,
 }
-
-#[derive(Clone, Copy)]
-pub struct Color(pub u8, pub u8, pub u8);
 
 struct Card(File);
 impl AsRawFd for Card {
@@ -37,19 +36,21 @@ impl AsFd for Card {
 impl BasicDevice for Card {}
 impl ControlDevice for Card {}
 
-impl<'a> Graphics {
+impl Graphics {
     pub fn new(path: &str, width: usize, height: usize) -> Self {
         let file = File::options().read(true).write(true).open(path).unwrap();
         let card = Card(file);
 
         let fb = card
-            .create_dumb_buffer((width as u32, height as u32), DrmFourcc::Big_endian, 32)
+            .create_dumb_buffer((width as u32, height as u32), 32)
             .unwrap();
+        let map = card.map_dumb_buffer(&fb).unwrap();
 
         Self {
             width,
             height,
             fb,
+            map,
             card,
             stride: fb.pitch() as usize,
             bg_color: Color(0, 0, 0),
@@ -58,7 +59,7 @@ impl<'a> Graphics {
     }
 
     fn buf(&mut self) -> &mut [u8] {
-        unsafe { std::slice::from_raw_parts_mut(self.map.as_mut_ptr(), self.fb.size().0 as usize) }
+        unsafe { std::slice::from_raw_parts_mut(self.map.as_mut_ptr(), self.fb.size() as usize) }
     }
 
     pub fn set_color(&mut self, color: Color) {
