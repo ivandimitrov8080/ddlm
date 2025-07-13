@@ -45,11 +45,11 @@ impl<'a> LoginManager<'a> {
             dimensions: (1024, 168),
             mode: Mode::EditingUsername,
             greetd: greetd::GreetD::new(),
-            config,
             var_screen_info: &fb.var_screen_info,
             should_refresh: false,
             username: String::with_capacity(USERNAME_CAP),
             password: String::with_capacity(PASSWORD_CAP),
+            config,
         }
     }
 
@@ -70,101 +70,36 @@ impl<'a> LoginManager<'a> {
         self.should_refresh = true;
     }
 
-    fn offset(&self) -> (u32, u32) {
-        (
-            (self.screen_size.0 - self.dimensions.0) / 2 + 100,
-            (self.screen_size.1 - self.dimensions.1) / 2,
-        )
-    }
-
-    fn draw_bg(&mut self) -> Result<(), Error> {
-        let (x, y) = self.offset();
+    fn draw_prompt(&mut self, offset: (u32, u32)) -> Result<(), Error> {
         let mut buf = buffer::Buffer::new(self.buf, self.screen_size);
-        let bg = self.config.theme.module.background_start_color;
-        let fg = Color::WHITE;
-
-        let hostname = hostname::get()?.to_string_lossy().into_owned();
-
-        let mut title_font = self.config.theme.module.title_font.clone();
         let mut prompt_font = self.config.theme.module.font.clone();
-
-        title_font.auto_draw_text(
-            &mut buf.offset(((self.screen_size.0 / 2) - 100, 32))?,
-            &bg,
-            &fg,
-            &format!("Welcome to {hostname}"),
-        )?;
-
+        let bg = self.config.theme.module.background_start_color;
+        buf.memset(&bg);
+        let mut stars = "".to_string();
+        for _ in 0..self.password.len() {
+            stars += "*";
+        }
         let (username_color, password_color) = match self.mode {
             Mode::EditingUsername => (Color::YELLOW, Color::WHITE),
             Mode::EditingPassword => (Color::WHITE, Color::YELLOW),
         };
 
+        let username = self.username.clone();
+
+        let (x, y) = (offset.0 - 40, offset.1 - 10);
         prompt_font.auto_draw_text(
-            &mut buf
-                .subdimensions((x, y, self.dimensions.0, self.dimensions.1))?
-                .offset((256, 64))?,
+            &mut buf.offset((x, y))?,
             &bg,
             &username_color,
-            "username:",
+            &format!("Username: {username}"),
         )?;
 
         prompt_font.auto_draw_text(
-            &mut buf
-                .subdimensions((x, y, self.dimensions.0, self.dimensions.1))?
-                .offset((256, 104))
-                .unwrap(),
+            &mut buf.offset((x, y + 20))?,
             &bg,
             &password_color,
-            "password:",
+            &format!("Password: {stars}"),
         )?;
-
-        self.should_refresh = true;
-
-        Ok(())
-    }
-
-    fn draw_username(&mut self, username: &str, redraw: bool) -> Result<(), Error> {
-        let (x, y) = self.offset();
-        let (x, y) = (x + 416, y + 64);
-        let dim = (self.dimensions.0 - 416 - 32, 32);
-
-        let mut buf = buffer::Buffer::new(self.buf, self.screen_size);
-        let mut buf = buf.subdimensions((x, y, dim.0, dim.1))?;
-        let mut prompt_font = self.config.theme.module.font.clone();
-        let bg = self.config.theme.module.background_start_color;
-        if redraw {
-            buf.memset(&bg);
-        }
-
-        prompt_font.auto_draw_text(&mut buf, &bg, &Color::WHITE, username)?;
-
-        self.should_refresh = true;
-
-        Ok(())
-    }
-
-    fn draw_password(&mut self, password: &str, redraw: bool) -> Result<(), Error> {
-        let (x, y) = self.offset();
-        let (x, y) = (x + 416, y + 104);
-        let dim = (self.dimensions.0 - 416 - 32, 32);
-
-        let mut buf = buffer::Buffer::new(self.buf, self.screen_size);
-        let mut buf = buf.subdimensions((x, y, dim.0, dim.1))?;
-        let mut prompt_font = self.config.theme.module.font.clone();
-        let bg = self.config.theme.module.background_start_color;
-        if redraw {
-            buf.memset(&bg);
-        }
-
-        let mut stars = "".to_string();
-        for _ in 0..password.len() {
-            stars += "*";
-        }
-
-        prompt_font.auto_draw_text(&mut buf, &bg, &Color::WHITE, &stars)?;
-
-        self.should_refresh = true;
 
         Ok(())
     }
@@ -177,15 +112,17 @@ impl<'a> LoginManager<'a> {
     }
 
     fn redraw(&mut self) {
-        self.draw_bg().expect("unable to draw background");
-        self.draw_username(&self.username.clone(), true)
-            .expect("unable to draw username prompt");
-        self.draw_password(&self.password.clone(), true)
-            .expect("unable to draw password prompt");
+        let xoff = self.config.theme.module.dialog_horizontal_alignment;
+        let yoff = self.config.theme.module.dialog_vertical_alignment;
+        let x = (self.screen_size.0 as f32 * xoff) as u32;
+        let y = (self.screen_size.1 as f32 * yoff) as u32;
+        self.draw_prompt((x, y)).expect("unable to draw prompt");
+        self.should_refresh = true;
     }
 
     pub fn start(&mut self) {
         self.clear();
+        self.redraw();
         let mut last_mode = self.mode;
         let mut had_failure = false;
         let stdin_handle = std::io::stdin();
