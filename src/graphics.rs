@@ -2,7 +2,7 @@
 // A p5.js-style graphics API over DRM dumb buffers
 
 use drm::buffer::{Buffer, DrmFourcc};
-use drm::control::dumbbuffer::DumbBuffer;
+use drm::control::dumbbuffer::{DumbBuffer, DumbMapping};
 use drm::control::Device as ControlDevice;
 use drm::Device as BasicDevice;
 use std::f64::consts::PI;
@@ -10,11 +10,10 @@ use std::fs::File;
 use std::os::fd::AsFd;
 use std::os::unix::io::{AsRawFd, RawFd};
 
-pub struct Graphics<'a> {
+pub struct Graphics {
     pub width: usize,
     pub height: usize,
     fb: DumbBuffer,
-    buf: &'a mut [u8],
     card: Card,
     stride: usize,
     bg_color: Color,
@@ -38,23 +37,19 @@ impl AsFd for Card {
 impl BasicDevice for Card {}
 impl ControlDevice for Card {}
 
-impl Graphics<'_> {
+impl<'a> Graphics {
     pub fn new(path: &str, width: usize, height: usize) -> Self {
         let file = File::options().read(true).write(true).open(path).unwrap();
         let card = Card(file);
 
-        let mut fb = card
+        let fb = card
             .create_dumb_buffer((width as u32, height as u32), DrmFourcc::Big_endian, 32)
             .unwrap();
-        let mut handle = card.map_dumb_buffer(&mut fb).unwrap();
-        let buf =
-            unsafe { std::slice::from_raw_parts_mut(handle.as_mut_ptr(), fb.size() as usize) };
 
         Self {
             width,
             height,
             fb,
-            buf,
             card,
             stride: fb.pitch() as usize,
             bg_color: Color(0, 0, 0),
@@ -62,12 +57,17 @@ impl Graphics<'_> {
         }
     }
 
+    fn buf(&mut self) -> &mut [u8] {
+        unsafe { std::slice::from_raw_parts_mut(self.map.as_mut_ptr(), self.fb.size().0 as usize) }
+    }
+
     pub fn set_color(&mut self, color: Color) {
         self.fg_color = color;
     }
 
     pub fn clear(&mut self) {
-        for chunk in self.buf.chunks_exact_mut(4) {
+        let buf = self.buf();
+        for chunk in buf.chunks_exact_mut(4) {
             let Color(r, g, b) = self.bg_color;
             chunk[0] = b;
             chunk[1] = g;
@@ -81,12 +81,13 @@ impl Graphics<'_> {
             return;
         }
         let i = (y as usize * self.stride) + (x as usize * 4);
-        if i + 3 < self.buf.len() {
+        let buf = self.buf();
+        if i + 3 < buf.len() {
             let Color(r, g, b) = self.fg_color;
-            self.buf[i] = b;
-            self.buf[i + 1] = g;
-            self.buf[i + 2] = r;
-            self.buf[i + 3] = 0xff;
+            buf[i] = b;
+            buf[i + 1] = g;
+            buf[i + 2] = r;
+            buf[i + 3] = 0xff;
         }
     }
 
@@ -135,6 +136,7 @@ impl Graphics<'_> {
     }
 
     pub fn present(&mut self) {
-        std::fs::write("framebuffer.raw", self.buf).unwrap();
+        let buf = self.buf();
+        std::fs::write("framebuffer.raw", buf).unwrap();
     }
 }
